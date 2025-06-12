@@ -14,7 +14,7 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // 路由
-app.use('/api', routes);
+app.use('/', routes);
 
 // 测试接口
 app.get('/health', (req, res) => {

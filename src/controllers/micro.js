@@ -4,28 +4,26 @@ const fs = require('fs')
 const path = require('path')
 const moment = require('moment')
 
-// 组件信息文件路径
-const componentsInfoPath = path.join(__dirname, '..', 'data', 'components', 'components-info.json')
-// 活跃组件配置文件路径
-const activeComponentsPath = path.join(__dirname, '..', 'data', 'components', 'active-components.json')
+// 组件存储目录
+const componentsDir = path.join(__dirname, '..', '..', 'components')
 
-// 确保目录存在
-const ensureDir = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true })
-  }
+// 确保组件目录存在
+if (!fs.existsSync(componentsDir)) {
+  fs.mkdirSync(componentsDir, { recursive: true })
 }
+
+// 组件信息文件路径
+const componentsInfoPath = path.join(componentsDir, 'components-info.json')
+// 活跃组件配置文件路径
+const activeComponentsPath = path.join(componentsDir, 'active-components.json')
 
 // 确保文件存在
-const ensureFile = (filePath, defaultContent = '{}') => {
-  const dirPath = path.dirname(filePath)
-  ensureDir(dirPath)
+function ensureFile(filePath) {
   if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, defaultContent, 'utf-8')
+    fs.writeFileSync(filePath, JSON.stringify({}), 'utf-8')
   }
 }
 
-// 初始化文件
 ensureFile(componentsInfoPath)
 ensureFile(activeComponentsPath)
 
@@ -74,47 +72,40 @@ const updateActiveComponents = () => {
 
 // 查找组件
 const findComponent = async (req, res) => {
-  let res_data = { code: 0, msg: '', data: {} }
   try {
     const { componentName, version } = req.body
     
     if (!componentName || !version) {
-      res_data.code = 400
-      res_data.msg = '组件名称和版本都是必需的'
-      return res_data
+      return res.status(400).json({ error: '组件名称和版本都是必需的' })
     }
 
     const componentsInfo = readComponentsInfo()
     
     if (!componentsInfo[componentName]) {
-      res_data.code = 404
-      res_data.msg = '未找到该组件'
-      return res_data
+      return res.status(404).json({ error: '未找到该组件' })
     }
 
     const componentVersion = componentsInfo[componentName].find(v => v.version === version)
     
     if (!componentVersion) {
-      res_data.code = 404
-      res_data.msg = '未找到该版本的组件'
-      return res_data
+      return res.status(404).json({ error: '未找到该版本的组件' })
     }
 
+    // 获取服务器的域名和端口
     const protocol = req.protocol
     const host = req.get('host')
     const baseUrl = `${protocol}://${host}`
 
-    res_data.data = {
+    // 返回完整的组件信息，包括完整的URL
+    const result = {
       ...componentVersion,
       path: `${baseUrl}${componentVersion.path}`
     }
-    res_data.code = 200
-    res_data.msg = '查找组件成功'
+
+    res.json(result)
   } catch (error) {
-    res_data.code = 500
-    res_data.msg = error.message
+    res.status(500).json({ error: error.message })
   }
-  return res_data
 }
 
 // 发布组件
@@ -355,15 +346,107 @@ const updateActiveComponentsConfig = async (req, res) => {
   return res_data
 }
 
+// 获取组件文件
+const getComponentFile = async (req, res) => {
+  try {
+    const { componentName, filename } = req.params
+    const filePath = path.join(componentsDir, componentName, filename)
+    
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        status: 'error',
+        message: '文件不存在'
+      })
+    }
+    
+    res.sendFile(filePath)
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    })
+  }
+}
+
+// 上传组件文件
+const uploadComponentFile = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: 'error',
+        message: '未上传文件'
+      })
+    }
+
+    const componentName = req.body.componentName
+    const version = req.body.version || 'unknown'
+    const timestamp = req.body.timestamp || Date.now()
+    const buildInfo = req.body.buildInfo || ''
+    const metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {}
+    
+    // 更新组件信息
+    const componentsInfo = readComponentsInfo()
+    if (!componentsInfo[componentName]) {
+      componentsInfo[componentName] = []
+    }
+
+    const componentInfo = {
+      path: `/micro/components/file/${componentName}/${req.file.filename}`,
+      time: timestamp,
+      version: version,
+      publishInfo: {
+        publisher: req.body.publisher || 'system',
+        publishTime: timestamp,
+        description: req.body.description || `Version ${version}`,
+        buildInfo: buildInfo,
+        status: 'published'
+      },
+      buildDetails: metadata.buildDetails || {},
+      metadata: {
+        name: metadata.name,
+        dependencies: metadata.dependencies,
+        peerDependencies: metadata.peerDependencies,
+        author: metadata.author,
+        license: metadata.license,
+        repository: metadata.repository
+      }
+    }
+
+    // 将新信息添加到数组开头
+    componentsInfo[componentName].unshift(componentInfo)
+    saveComponentsInfo(componentsInfo)
+    
+    // 更新活跃组件配置
+    updateActiveComponents()
+    
+    res.json({
+      status: 'success',
+      data: {
+        filename: req.file.filename,
+        path: componentInfo.path,
+        info: componentInfo
+      },
+      message: '上传组件文件成功'
+    })
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    })
+  }
+}
+
 module.exports = {
+  getComponents,
   findComponent,
   publishComponent,
   addComponentInfo,
-  getComponents,
   getComponentVersions,
-  getComponentsInfo,
   updateComponentInfo,
   deleteComponentInfo,
+  getComponentFile,
+  uploadComponentFile,
+  getComponentsInfo,
   getActiveComponents,
   updateActiveComponentsConfig
 }
