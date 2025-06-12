@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const microController = require('../controllers/micro');
 
 // 获取微服务列表
 router.get('/list', (req, res) => {
@@ -21,30 +22,21 @@ router.get('/detail/:id', (req, res) => {
 });
 
 // 查找组件
-router.post('/components/find', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '查找组件成功'
-  });
+router.post('/components/find', async (req, res) => {
+  const result = await microController.findComponent(req, res);
+  res.json(result);
 });
 
 // 发布组件
-router.post('/components/publish', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '发布组件成功'
-  });
+router.post('/components/publish', async (req, res) => {
+  const result = await microController.publishComponent(req, res);
+  res.json(result);
 });
 
 // 新增组件信息
-router.post('/components/:componentName', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '新增组件信息成功'
-  });
+router.post('/components/:componentName', async (req, res) => {
+  const result = await microController.addComponentInfo(req, res);
+  res.json(result);
 });
 
 // 上传组件文件
@@ -57,21 +49,15 @@ router.post('/upload', (req, res) => {
 });
 
 // 获取组件列表
-router.get('/components', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '获取组件列表成功'
-  });
+router.get('/components', async (req, res) => {
+  const result = await microController.getComponents(req, res);
+  res.json(result);
 });
 
 // 获取特定组件的所有版本信息
-router.get('/components/:componentName/info', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '获取组件版本信息成功'
-  });
+router.get('/components/:componentName/info', async (req, res) => {
+  const result = await microController.getComponentVersions(req, res);
+  res.json(result);
 });
 
 // 获取组件文件
@@ -84,48 +70,33 @@ router.get('/components/:componentName/:filename', (req, res) => {
 });
 
 // 获取组件信息文件
-router.get('/components-info', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '获取组件信息文件成功'
-  });
+router.get('/components-info', async (req, res) => {
+  const result = await microController.getComponentsInfo(req, res);
+  res.json(result);
 });
 
 // 更新组件信息
-router.put('/components/:componentName/:timestamp', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '更新组件信息成功'
-  });
+router.put('/components/:componentName/:timestamp', async (req, res) => {
+  const result = await microController.updateComponentInfo(req, res);
+  res.json(result);
 });
 
 // 删除组件信息
-router.delete('/components/:componentName/:timestamp', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '删除组件信息成功'
-  });
+router.delete('/components/:componentName/:timestamp', async (req, res) => {
+  const result = await microController.deleteComponentInfo(req, res);
+  res.json(result);
 });
 
 // 获取活跃组件配置
-router.get('/active-components', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '获取活跃组件配置成功'
-  });
+router.get('/active-components', async (req, res) => {
+  const result = await microController.getActiveComponents(req, res);
+  res.json(result);
 });
 
 // 手动更新活跃组件配置
-router.post('/active-components/update', (req, res) => {
-  res.json({
-    status: 'success',
-    data: null,
-    message: '更新活跃组件配置成功'
-  });
+router.post('/active-components/update', async (req, res) => {
+  const result = await microController.updateActiveComponentsConfig(req, res);
+  res.json(result);
 });
 
 module.exports = router; 
