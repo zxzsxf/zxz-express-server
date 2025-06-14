@@ -1,6 +1,6 @@
 {
   "button": {
-    "path": "/components/button/button-1748876097257.js",
+    "path": "/micro/components/file/button/button-1748876097257.js",
     "time": "1748876097257",
     "version": "0.0.3",
     "publishInfo": {
@@ -34,7 +34,7 @@
     }
   },
   "card": {
-    "path": "/components/card/card-1748879130268.js",
+    "path": "/micro/components/file/card/card-1748879130268.js",
     "time": "1748879130268",
     "version": "0.0.1",
     "publishInfo": {

@@ -5,7 +5,7 @@ const path = require('path')
 const moment = require('moment')
 
 // 组件存储目录
-const componentsDir = path.join(__dirname, '..', '..', 'components')
+const componentsDir = path.join(__dirname, '..','data', 'components')
 
 // 确保组件目录存在
 if (!fs.existsSync(componentsDir)) {
