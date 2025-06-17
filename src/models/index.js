@@ -1,29 +1,46 @@
-const { Sequelize } = require('sequelize');
-const config = require('../config/index').database;
+'use strict'
 
-const sequelize = new Sequelize(
-  config.database,
-  config.username,
-  config.password,
-  {
-    ...config,
-    logging: process.env.NODE_ENV === 'dev' ? console.log : false
-  }
-);
+const fs = require('fs')
 
-const db = {
+const { sequelizeConfig, DEBUG } = require('../config')
+
+const logging = DEBUG ? console : false
+const { DB } = require('../utils/db_utils/db')
+const { DbHelper } = require('../utils/db_utils/dbHelper')
+
+const dbUtil = new DB(sequelizeConfig, logging, DEBUG)
+let all_model_list = [__dirname + '/self', __dirname + '/pf']
+
+// 加载model文件
+dbUtil.load_model_list(all_model_list)
+
+dbUtil.modelAssociate()
+
+let { sequelize, dbType, dbName, knex, models, tabs } = dbUtil
+
+let dbHelper = new DbHelper(sequelize)
+// 同步表结构
+dbUtil.sync()
+
+dbUtil.dbHelper = dbHelper
+
+// plg_common 和 smt_xx 都用db作为数据加载的依据
+
+let db = {
   sequelize,
-  Sequelize
-};
+  dbType,
+  dbName,
+  ...models,
+  tabs,
+  dbHelper,
+  knex
+}
 
-// 在这里导入模型
-// db.User = require('./user')(sequelize, Sequelize);
+global.db = db
 
-// 同步所有模型
-sequelize.sync({ alter: process.env.NODE_ENV === 'dev' }).then(() => {
-  console.log('数据库模型同步完成');
-}).catch(err => {
-  console.error('数据库模型同步失败:', err);
-});
-
-module.exports = db; 
+module.exports = {
+  sequelize,
+  dbType,
+  dbName,
+  models
+}
