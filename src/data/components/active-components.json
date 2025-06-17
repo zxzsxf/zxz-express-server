@@ -1,20 +1,20 @@
 {
   "button": {
-    "path": "/micro/components/file/button/button-1748876097257.js",
-    "time": "1748876097257",
-    "version": "0.0.3",
+    "path": "/micro/components/file/button/button-1749918964178.js",
+    "time": "1749918964178",
+    "version": "0.0.4",
     "publishInfo": {
       "publisher": "szy",
-      "publishTime": "1749142266115",
-      "description": "Version 0.0.3",
+      "publishTime": "1749918964178",
+      "description": "Version 0.0.4",
       "buildInfo": "$npm_config_buildInfo",
       "status": "published"
     },
     "buildDetails": {
       "componentName": "button",
-      "version": "0.0.3",
-      "buildTime": "2025-06-02 22:54:51",
-      "gitCommit": "60a1fce381d17e02d409e492a8427926c5abb786",
+      "version": "0.0.4",
+      "buildTime": "2025/6/15 上午12:35:11",
+      "gitCommit": "9388f48e062108677e004d750924d365c81d2262",
       "gitBranch": "master",
       "buildInfo": "$npm_config_buildInfo"
     },
