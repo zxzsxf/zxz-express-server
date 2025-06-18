@@ -1,46 +1,61 @@
 'use strict'
 
 const fs = require('fs')
+const path = require('path')
+const { Sequelize } = require('sequelize')
+const BaseModel = require('./base_model')
 
 const { sequelizeConfig, DEBUG } = require('../config')
 
 const logging = DEBUG ? console : false
-const { DB } = require('../utils/db_utils/db')
-const { DbHelper } = require('../utils/db_utils/dbHelper')
 
-const dbUtil = new DB(sequelizeConfig, logging, DEBUG)
-let all_model_list = [__dirname + '/self', __dirname + '/pf']
+// 创建sequelize实例
+const sequelize = new Sequelize(
+  sequelizeConfig.database,
+  sequelizeConfig.username,
+  sequelizeConfig.password,
+  {
+    ...sequelizeConfig.connect,
+    logging: logging ? console.log : false
+  }
+)
 
-// 加载model文件
-dbUtil.load_model_list(all_model_list)
+// 设置sequelize实例到BaseModel
+BaseModel.setSequelize(sequelize)
 
-dbUtil.modelAssociate()
+// 加载模型文件
+const models = {}
+const modelsDir = path.join(__dirname, 'components')
 
-let { sequelize, dbType, dbName, knex, models, tabs } = dbUtil
-
-let dbHelper = new DbHelper(sequelize)
-// 同步表结构
-dbUtil.sync()
-
-dbUtil.dbHelper = dbHelper
-
-// plg_common 和 smt_xx 都用db作为数据加载的依据
-
-let db = {
-  sequelize,
-  dbType,
-  dbName,
-  ...models,
-  tabs,
-  dbHelper,
-  knex
+if (fs.existsSync(modelsDir)) {
+  const modelFiles = fs.readdirSync(modelsDir)
+  modelFiles.forEach(file => {
+    if (file.endsWith('.js') && file !== 'index.js') {
+      const model = require(path.join(modelsDir, file))
+      models[model.name] = model
+    }
+  })
 }
 
-global.db = db
+// 建立模型关联
+Object.keys(models).forEach(modelName => {
+  if (models[modelName].associate) {
+    models[modelName].associate(models)
+  }
+})
+
+// 同步数据库表结构
+const syncDatabase = async () => {
+  try {
+    await sequelize.sync({ alter: true })
+    console.log('数据库表结构同步成功')
+  } catch (error) {
+    console.error('数据库表结构同步失败:', error)
+  }
+}
 
 module.exports = {
   sequelize,
-  dbType,
-  dbName,
-  models
-}
+  models,
+  syncDatabase
+} 

@@ -3,6 +3,7 @@
 const fs = require('fs')
 const path = require('path')
 const moment = require('moment')
+const componentService = require('../services/componentService')
 
 // 组件存储目录
 const componentsDir = path.join(__dirname, '..','data', 'components')
@@ -27,7 +28,7 @@ function ensureFile(filePath) {
 ensureFile(componentsInfoPath)
 ensureFile(activeComponentsPath)
 
-// 读取组件信息
+// 读取组件信息（兼容旧版本）
 const readComponentsInfo = () => {
   try {
     return JSON.parse(fs.readFileSync(componentsInfoPath, 'utf-8'))
@@ -36,12 +37,12 @@ const readComponentsInfo = () => {
   }
 }
 
-// 保存组件信息
+// 保存组件信息（兼容旧版本）
 const saveComponentsInfo = (info) => {
   fs.writeFileSync(componentsInfoPath, JSON.stringify(info, null, 2), 'utf-8')
 }
 
-// 读取活跃组件配置
+// 读取活跃组件配置（兼容旧版本）
 const readActiveComponents = () => {
   try {
     return JSON.parse(fs.readFileSync(activeComponentsPath, 'utf-8'))
@@ -50,12 +51,12 @@ const readActiveComponents = () => {
   }
 }
 
-// 保存活跃组件配置
+// 保存活跃组件配置（兼容旧版本）
 const saveActiveComponents = (info) => {
   fs.writeFileSync(activeComponentsPath, JSON.stringify(info, null, 2), 'utf-8')
 }
 
-// 更新活跃组件配置
+// 更新活跃组件配置（兼容旧版本）
 const updateActiveComponents = () => {
   const componentsInfo = readComponentsInfo()
   const activeComponents = {}
@@ -79,16 +80,10 @@ const findComponent = async (req, res) => {
       return res.status(400).json({ error: '组件名称和版本都是必需的' })
     }
 
-    const componentsInfo = readComponentsInfo()
+    const component = await componentService.findComponent(componentName, version)
     
-    if (!componentsInfo[componentName]) {
+    if (!component) {
       return res.status(404).json({ error: '未找到该组件' })
-    }
-
-    const componentVersion = componentsInfo[componentName].find(v => v.version === version)
-    
-    if (!componentVersion) {
-      return res.status(404).json({ error: '未找到该版本的组件' })
     }
 
     // 获取服务器的域名和端口
@@ -98,8 +93,8 @@ const findComponent = async (req, res) => {
 
     // 返回完整的组件信息，包括完整的URL
     const result = {
-      ...componentVersion,
-      path: `${baseUrl}${componentVersion.path}`
+      ...component,
+      path: `${baseUrl}${component.filePath}`
     }
 
     res.json(result)
@@ -112,44 +107,18 @@ const findComponent = async (req, res) => {
 const publishComponent = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
-    const { componentName, path, version } = req.body
+    const { componentName, version } = req.body
     
-    if (!componentName || !path || !version) {
+    if (!componentName || !version) {
       res_data.code = 400
-      res_data.msg = '组件名称、路径和版本都是必需的'
+      res_data.msg = '组件名称和版本都是必需的'
       return res_data
     }
 
-    const componentsInfo = readComponentsInfo()
-    const activeComponents = readActiveComponents()
+    const component = await componentService.publishComponent(componentName, version)
     
-    if (!componentsInfo[componentName]) {
-      res_data.code = 404
-      res_data.msg = '未找到该组件'
-      return res_data
-    }
-
-    const componentVersion = componentsInfo[componentName].find(v => v.version === version)
-    
-    if (!componentVersion) {
-      res_data.code = 404
-      res_data.msg = '未找到该版本的组件'
-      return res_data
-    }
-
-    componentVersion.publishInfo.status = 'published'
-    componentVersion.publishInfo.publishTime = Date.now().toString()
-    
-    const activeComponentInfo = {
-      ...componentVersion,
-    }
-
-    activeComponents[componentName] = activeComponentInfo
-    saveActiveComponents(activeComponents)
-
     res_data.data = {
-      component: activeComponentInfo,
-      activeComponents: activeComponents
+      component: component
     }
     res_data.code = 200
     res_data.msg = '发布组件成功'
@@ -166,16 +135,13 @@ const addComponentInfo = async (req, res) => {
   try {
     const { componentName } = req.params
     const componentData = req.body
-    const componentsInfo = readComponentsInfo()
+    
+    // 添加组件名称到数据中
+    componentData.componentName = componentName
+    
+    const component = await componentService.addComponent(componentData)
 
-    if (!componentsInfo[componentName]) {
-      componentsInfo[componentName] = []
-    }
-
-    componentsInfo[componentName].unshift(componentData)
-    saveComponentsInfo(componentsInfo)
-
-    res_data.data = componentData
+    res_data.data = component
     res_data.code = 200
     res_data.msg = '新增组件信息成功'
   } catch (error) {
@@ -189,8 +155,8 @@ const addComponentInfo = async (req, res) => {
 const getComponents = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
-    const componentsInfo = readComponentsInfo()
-    res_data.data = componentsInfo
+    const components = await componentService.getAllComponents()
+    res_data.data = components
     res_data.code = 200
     res_data.msg = '获取组件列表成功'
   } catch (error) {
@@ -200,15 +166,15 @@ const getComponents = async (req, res) => {
   return res_data
 }
 
-// 获取组件版本信息
+// 获取组件版本列表
 const getComponentVersions = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
     const { componentName } = req.params
-    const componentsInfo = readComponentsInfo()
-    res_data.data = componentsInfo[componentName] || []
+    const versions = await componentService.getComponentVersions(componentName)
+    res_data.data = versions
     res_data.code = 200
-    res_data.msg = '获取组件版本信息成功'
+    res_data.msg = '获取组件版本列表成功'
   } catch (error) {
     res_data.code = 500
     res_data.msg = error.message
@@ -216,26 +182,14 @@ const getComponentVersions = async (req, res) => {
   return res_data
 }
 
-// 获取组件信息文件
+// 获取组件信息配置
 const getComponentsInfo = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
-    const componentsInfo = readComponentsInfo()
-    const protocol = req.protocol
-    const host = req.get('host')
-    const baseUrl = `${protocol}://${host}`
-
-    const fullPathComponentsInfo = Object.entries(componentsInfo).reduce((acc, [componentName, versions]) => {
-      acc[componentName] = versions.map(version => ({
-        ...version,
-        path: `${baseUrl}${version.path}`
-      }))
-      return acc
-    }, {})
-
-    res_data.data = fullPathComponentsInfo
+    const components = await componentService.getAllComponents()
+    res_data.data = components
     res_data.code = 200
-    res_data.msg = '获取组件信息文件成功'
+    res_data.msg = '获取组件信息配置成功'
   } catch (error) {
     res_data.code = 500
     res_data.msg = error.message
@@ -249,28 +203,10 @@ const updateComponentInfo = async (req, res) => {
   try {
     const { componentName, timestamp } = req.params
     const updateData = req.body
-    const componentsInfo = readComponentsInfo()
-
-    if (!componentsInfo[componentName]) {
-      res_data.code = 404
-      res_data.msg = '未找到该组件'
-      return res_data
-    }
-
-    const componentIndex = componentsInfo[componentName].findIndex(c => c.time === timestamp)
-    if (componentIndex === -1) {
-      res_data.code = 404
-      res_data.msg = '未找到该版本的组件'
-      return res_data
-    }
-
-    componentsInfo[componentName][componentIndex] = {
-      ...componentsInfo[componentName][componentIndex],
-      ...updateData
-    }
-
-    saveComponentsInfo(componentsInfo)
-    res_data.data = componentsInfo[componentName][componentIndex]
+    
+    const component = await componentService.updateComponent(componentName, timestamp, updateData)
+    
+    res_data.data = component
     res_data.code = 200
     res_data.msg = '更新组件信息成功'
   } catch (error) {
@@ -285,28 +221,9 @@ const deleteComponentInfo = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
     const { componentName, timestamp } = req.params
-    const componentsInfo = readComponentsInfo()
-
-    if (!componentsInfo[componentName]) {
-      res_data.code = 404
-      res_data.msg = '未找到该组件'
-      return res_data
-    }
-
-    const initialLength = componentsInfo[componentName].length
-    componentsInfo[componentName] = componentsInfo[componentName].filter(c => c.time !== timestamp)
-
-    if (initialLength === componentsInfo[componentName].length) {
-      res_data.code = 404
-      res_data.msg = '未找到该版本的组件'
-      return res_data
-    }
-
-    if (componentsInfo[componentName].length === 0) {
-      delete componentsInfo[componentName]
-    }
-
-    saveComponentsInfo(componentsInfo)
+    
+    await componentService.deleteComponent(componentName, timestamp)
+    
     res_data.code = 200
     res_data.msg = '删除组件信息成功'
   } catch (error) {
@@ -320,7 +237,7 @@ const deleteComponentInfo = async (req, res) => {
 const getActiveComponents = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
-    const activeComponents = readActiveComponents()
+    const activeComponents = await componentService.getActiveComponents()
     res_data.data = activeComponents
     res_data.code = 200
     res_data.msg = '获取活跃组件配置成功'
@@ -335,7 +252,7 @@ const getActiveComponents = async (req, res) => {
 const updateActiveComponentsConfig = async (req, res) => {
   let res_data = { code: 0, msg: '', data: {} }
   try {
-    const activeComponents = updateActiveComponents()
+    const activeComponents = await componentService.updateActiveComponents()
     res_data.data = activeComponents
     res_data.code = 200
     res_data.msg = '更新活跃组件配置成功'
@@ -384,47 +301,47 @@ const uploadComponentFile = async (req, res) => {
     const buildInfo = req.body.buildInfo || ''
     const metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {}
     
-    // 更新组件信息
-    const componentsInfo = readComponentsInfo()
-    if (!componentsInfo[componentName]) {
-      componentsInfo[componentName] = []
-    }
-
-    const componentInfo = {
-      path: `/micro/components/file/${componentName}/${req.file.filename}`,
-      time: timestamp,
-      version: version,
+    // 创建组件数据
+    const componentData = {
+      componentName,
+      version,
+      filePath: `/micro/components/file/${componentName}/${req.file.filename}`,
+      time: timestamp.toString(),
+      publisher: req.body.publisher || 'system',
+      description: req.body.description || `Version ${version}`,
+      status: 'published',
+      metadata: {
+        name: metadata.name,
+        dependencies: metadata.dependencies || {},
+        peerDependencies: metadata.peerDependencies || {},
+        author: metadata.author,
+        license: metadata.license,
+        repository: metadata.repository || {}
+      },
+      buildDetails: metadata.buildDetails || {},
       publishInfo: {
         publisher: req.body.publisher || 'system',
-        publishTime: timestamp,
+        publishTime: timestamp.toString(),
         description: req.body.description || `Version ${version}`,
         buildInfo: buildInfo,
         status: 'published'
       },
-      buildDetails: metadata.buildDetails || {},
-      metadata: {
-        name: metadata.name,
-        dependencies: metadata.dependencies,
-        peerDependencies: metadata.peerDependencies,
-        author: metadata.author,
-        license: metadata.license,
-        repository: metadata.repository
-      }
+      buildTime: metadata.buildDetails?.buildTime ? new Date(metadata.buildDetails.buildTime) : null,
+      publishTime: new Date(parseInt(timestamp))
     }
 
-    // 将新信息添加到数组开头
-    componentsInfo[componentName].unshift(componentInfo)
-    saveComponentsInfo(componentsInfo)
+    // 添加组件到数据库
+    const component = await componentService.addComponent(componentData)
     
     // 更新活跃组件配置
-    updateActiveComponents()
+    await componentService.updateActiveComponents()
     
     res.json({
       status: 'success',
       data: {
         filename: req.file.filename,
-        path: componentInfo.path,
-        info: componentInfo
+        path: component.filePath,
+        info: component
       },
       message: '上传组件文件成功'
     })
@@ -434,6 +351,20 @@ const uploadComponentFile = async (req, res) => {
       message: error.message
     })
   }
+}
+
+// 数据迁移接口
+const migrateData = async (req, res) => {
+  let res_data = { code: 0, msg: '', data: {} }
+  try {
+    await componentService.migrateFromFileSystem()
+    res_data.code = 200
+    res_data.msg = '数据迁移成功'
+  } catch (error) {
+    res_data.code = 500
+    res_data.msg = error.message
+  }
+  return res_data
 }
 
 module.exports = {
@@ -448,5 +379,6 @@ module.exports = {
   uploadComponentFile,
   getComponentsInfo,
   getActiveComponents,
-  updateActiveComponentsConfig
+  updateActiveComponentsConfig,
+  migrateData
 }

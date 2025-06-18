@@ -96,5 +96,10 @@ router.post('/config/active-components/update', async (req, res) => {
   res.json(result);
 });
 
+// 数据迁移接口
+router.post('/migrate', async (req, res) => {
+  const result = await microController.migrateData(req, res);
+  res.json(result);
+});
 
 module.exports = router; 
