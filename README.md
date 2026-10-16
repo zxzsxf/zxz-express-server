@@ -2,10 +2,12 @@
 
 ZXZ 前端组件服务端，基于 Node.js、Express 和 Sequelize。服务提供组件版本元数据、发布状态、组件文件及 goview 微服务示例接口。默认使用 MySQL 保存组件元数据；组件配置 JSON 和组件源码也保存在本地文件中。
 
+完整接口说明、请求示例、响应格式及已知限制见 [接口文档](docs/API.md)。
+
 ```
 测试接口：
-* http://localhost:3000/health
-* http://localhost:3000/api/test
+http://localhost:3000/health
+http://localhost:3000/test
 ```
 
 ## 项目结构
