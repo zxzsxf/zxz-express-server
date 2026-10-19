@@ -10,7 +10,7 @@ const port = config.APP_PORT;
 
 // 中间件
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 
 // 路由

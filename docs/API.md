@@ -1,5 +1,15 @@
 # 接口文档
 
+## 表单接口
+
+Express 提供以下 JSON 接口，均位于 `/api/forms`：
+
+- `GET /api/forms`：返回 `{ code: 0, data: FormMeta[] }`，按更新时间倒序。
+- `GET /api/forms/:formCode`：返回 `{ code: 0, data: StoredForm }`，不存在返回 HTTP 404。
+- `POST /api/forms`：创建或更新独立路由表单，请求体为 `{ formCode, title, placement: "route", path, schema }`，成功返回表单元数据。`schema` 须为带 `properties` 的 Formily object schema。`path` 须位于 `/forms/` 下；重复编号、重复路由或变更表单类型返回 HTTP 409。
+
+表单存储在 MySQL `flow_forms` 表中，由现有 Sequelize 启动同步流程创建。此表从空数据开始，不导入业务项目的 `public/flowforms`。保存接口目前没有身份鉴权，页面入口限制不限制直接调用接口。
+
 本文依据当前仓库的路由、控制器、服务及 Sequelize 模型编写，示例数据仅用于说明响应结构，不代表数据库中的实际记录。本文记录当前实现，已知问题见文末。
 
 ## 1. 调用约定
