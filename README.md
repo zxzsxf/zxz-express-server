@@ -6,8 +6,8 @@ ZXZ 前端组件服务端，基于 Node.js、Express 和 Sequelize。服务提�
 
 ```
 测试接口：
-http://localhost:3000/health
-http://localhost:3000/test
+http://localhost:1001/health
+http://localhost:1001/test
 ```
 
 ## 项目结构
@@ -90,7 +90,7 @@ mysql -u root -p < db/init.sql
 | `DB_NAME` | `goview`            | 数据库名                       |
 | `DB_USER` | `root`              | 数据库用户                     |
 | `DB_PWD`  | `your_new_password` | 数据库密码，需按本机实际值设置 |
-| `PORT`    | `3000`              | HTTP 服务端口                  |
+| `PORT`    | `1001`              | HTTP 服务端口                  |
 
 PowerShell 中可在启动服务的同一个窗口设置：
 
@@ -100,7 +100,7 @@ $env:DB_PORT = "3306"
 $env:DB_NAME = "goview"
 $env:DB_USER = "root"
 $env:DB_PWD = "你的MySQL密码"
-$env:PORT = "3000"
+$env:PORT = "1001"
 ```
 
 macOS/Linux (bash/zsh) 示例：
@@ -111,7 +111,7 @@ export DB_PORT=3306
 export DB_NAME=goview
 export DB_USER=root
 export DB_PWD='你的MySQL密码'
-export PORT=3000
+export PORT=1001
 ```
 
 注意：仓库中的 `env.example` 只是占位内容；项目没有引入 dotenv，也没有加载 `.env` 文件的代码。请通过系统环境变量配置，或直接调整 `src/config/index.js`。
@@ -122,7 +122,7 @@ export PORT=3000
 pnpm run dev
 ```
 
-服务默认监听 `http://localhost:3000`。`dev` 脚本启用 nodemon，修改 `src/**/*.js` 后会自动重启。
+服务默认监听 `http://localhost:1001`。`dev` 脚本启用 nodemon，修改 `src/**/*.js` 后会自动重启。
 
 其他脚本：
 
@@ -137,9 +137,9 @@ pnpm run pm2     # 使用 pm2.json 启动 PM2 进程
 浏览器或 PowerShell 中访问：
 
 ```text
-GET http://localhost:3000/health
-GET http://localhost:3000/test
-GET http://localhost:3000/goview/list
+GET http://localhost:1001/health
+GET http://localhost:1001/test
+GET http://localhost:1001/goview/list
 ```
 
 健康检查返回服务状态、应用名和运行环境。组件 API 挂载在 `/micro`，例如：
@@ -167,7 +167,7 @@ POST   /micro/migrate
 ## 数据库行为与注意事项
 
 - 启动时服务先验证 MySQL 连接，再调用 Sequelize `sync({ alter: true })` 尝试同步模型表结构。首次启动建议先备份已有数据库；`alter: true` 可能修改表结构。
-- 数据库连接失败时，`src/server.js` 仍会启动 HTTP 服务并打印“文件系统模式”。但组件查询、版本和发布等 `componentService` 业务仍依赖 MySQL，因此该模式不代表完整的离线组件 API 可用；`/health`、`/test` 等非数据库接口仍可用于检查进程。
+- 数据库连接失败时，`src/server.js` 仍会启动 HTTP 服务，但组件上传、下载、查询、版本和发布等接口不可用；`/health`、`/test` 等非数据库接口仍可用于检查进程。
 - MySQL 账号需能访问配置的数据库；如果使用自定义库名，请同时创建该数据库，并将 `DB_NAME` 设置一致。`db/init.sql` 默认创建 `goview`。
 - 本地组件信息文件位于 `src/data/components`。提交或部署时请根据实际需要保留该目录中的 JSON 和组件文件。
 - 如果启动日志显示数据库认证或连接失败，先核对 MySQL 是否运行、库是否创建，以及 `DB_HOST`、`DB_PORT`、`DB_NAME`、`DB_USER`、`DB_PWD` 是否在当前终端生效。

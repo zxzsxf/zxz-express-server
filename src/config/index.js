@@ -16,7 +16,7 @@ const DB_PWD = process.env.DB_PWD || 'your_new_password'; // 请设置正确的�
 let config = {
   APP_ROOT: APP_ROOT,
   APP_NAME: APP_NAME,
-  APP_PORT: process.env.PORT || 3000,
+  APP_PORT: process.env.PORT || 1001,
   APP_SECRET: Buffer.from(APP_NAME, 'base64'),
   DEBUG: process.env.NODE_ENV !== 'production',
   VERSION: _package.version,

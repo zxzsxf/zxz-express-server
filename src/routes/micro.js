@@ -2,29 +2,8 @@ const express = require('express');
 const router = express.Router();
 const microController = require('../controllers/micro');
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-// 配置multer存储
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const componentName = req.body.componentName;
-    const componentDir = path.join(__dirname, '..', '..', 'components', componentName);
-    
-    if (!fs.existsSync(componentDir)) {
-      fs.mkdirSync(componentDir, { recursive: true });
-    }
-    
-    cb(null, componentDir);
-  },
-  filename: function (req, file, cb) {
-    const componentName = req.body.componentName;
-    const timestamp = req.body.timestamp || Date.now();
-    cb(null, `${componentName}-${timestamp}.js`);
-  }
-});
-
-const upload = multer({ storage: storage });
+const upload = multer({ storage: multer.memoryStorage() });
 
 // 组件相关接口
 // 获取组件列表
@@ -102,4 +81,4 @@ router.post('/migrate', async (req, res) => {
   res.json(result);
 });
 
-module.exports = router; 
+module.exports = router;

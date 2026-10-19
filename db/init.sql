@@ -27,6 +27,19 @@ CREATE TABLE IF NOT EXISTS `components` (
   KEY `idx_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组件信息表';
 
+-- 组件 JS 文件内容
+CREATE TABLE IF NOT EXISTS `component_files` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  `componentId` int(11) NOT NULL COMMENT '关联的组件版本ID',
+  `filePath` varchar(500) NOT NULL COMMENT '组件下载路径',
+  `fileSize` bigint(20) NOT NULL COMMENT '文件大小（字节）',
+  `content` longblob NOT NULL COMMENT '组件 JS 文件内容',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_component_file_version` (`componentId`),
+  UNIQUE KEY `unique_component_file_path` (`filePath`),
+  CONSTRAINT `fk_component_file` FOREIGN KEY (`componentId`) REFERENCES `components` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='组件 JS 文件表';
+
 -- 活跃组件配置表
 CREATE TABLE IF NOT EXISTS `active_components` (
   `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -54,4 +67,4 @@ CREATE TABLE IF NOT EXISTS `active_components` (
 -- 创建索引优化查询性能
 CREATE INDEX `idx_components_created_at` ON `components` (`created_at`);
 CREATE INDEX `idx_components_publish_time` ON `components` (`publishTime`);
-CREATE INDEX `idx_active_components_created_at` ON `active_components` (`created_at`); 
+CREATE INDEX `idx_active_components_created_at` ON `active_components` (`created_at`);

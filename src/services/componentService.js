@@ -1,8 +1,8 @@
-const { models } = require('../models')
+const { sequelize, models } = require('../models')
 const fs = require('fs')
 const path = require('path')
 
-const { Component, ActiveComponent } = models
+const { Component, ComponentFile, ActiveComponent } = models
 
 class ComponentService {
   // 获取所有组件信息
@@ -63,6 +63,28 @@ class ComponentService {
     }
   }
 
+  // 同时保存版本信息、文件内容和活跃配置
+  async addComponentFile(componentData, content) {
+    return sequelize.transaction(async transaction => {
+      const component = await Component.create(componentData, { transaction })
+      await ComponentFile.create({
+        componentId: component.id,
+        filePath: componentData.filePath,
+        fileSize: content.length,
+        content
+      }, { transaction })
+      await this.updateActiveComponents(transaction)
+      return component.toJSON()
+    })
+  }
+
+  async getComponentFile(filePath) {
+    return ComponentFile.findOne({
+      where: { filePath },
+      attributes: ['content']
+    })
+  }
+
   // 更新组件信息
   async updateComponent(componentName, time, updateData) {
     try {
@@ -108,7 +130,6 @@ class ComponentService {
           attributes: ['id', 'componentName', 'version', 'filePath', 'metadata']
         }]
       })
-      
       const result = {}
       activeComponents.forEach(active => {
         const activeData = active.toJSON()
@@ -129,12 +150,13 @@ class ComponentService {
   }
 
   // 更新活跃组件配置
-  async updateActiveComponents() {
+  async updateActiveComponents(transaction) {
     try {
       // 获取所有组件的最新版本
       const components = await Component.findAll({
         where: { status: 'published' },
-        order: [['componentName', 'ASC'], ['created_at', 'DESC']]
+        order: [['componentName', 'ASC'], ['created_at', 'DESC']],
+        transaction
       })
       
       const latestComponents = {}
@@ -146,7 +168,7 @@ class ComponentService {
       })
       
       // 清空现有活跃组件
-      await ActiveComponent.destroy({ where: {} })
+      await ActiveComponent.destroy({ where: {}, transaction })
       
       // 添加新的活跃组件
       const activeComponents = []
@@ -160,7 +182,7 @@ class ComponentService {
           publishInfo: componentData.publishInfo,
           buildDetails: componentData.buildDetails,
           metadata: componentData.metadata
-        })
+        }, { transaction })
         activeComponents.push(activeComponent.toJSON())
       }
       
@@ -277,4 +299,4 @@ class ComponentService {
   }
 }
 
-module.exports = new ComponentService() 
+module.exports = new ComponentService()

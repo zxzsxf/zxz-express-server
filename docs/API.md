@@ -4,7 +4,7 @@
 
 ## 1. 调用约定
 
-- 默认服务地址：`http://localhost:3000`，端口由环境变量 `PORT` 配置。
+- 默认服务地址：`http://localhost:1001`，端口由环境变量 `PORT` 配置。
 - 当前已挂载的接口没有鉴权中间件，无需携带 Token。
 - JSON 请求使用 `Content-Type: application/json`；文件上传使用 `multipart/form-data`。
 - 接口没有实现分页或查询条件；未明确说明的查询参数不会用于筛选。
@@ -165,7 +165,7 @@
 成功返回 HTTP 200，响应直接为组件对象，并增加 `path` 字段。`path` 由请求协议、Host 和组件 `filePath` 拼接，例如：
 
 ```text
-http://localhost:3000/micro/components/file/button/button-1748876097257.js
+http://localhost:1001/micro/components/file/button/button-1748876097257.js
 ```
 
 接口不按发布状态过滤。错误响应：
@@ -268,15 +268,15 @@ JSON 字段按本次提供的字段值更新，不应假设会自动深度合并
 
 `GET /micro/components/file/:componentName/:filename`
 
-路径参数 `componentName` 为组件目录名，`filename` 为完整文件名，例如 `button-1748876097257.js`。
+路径参数 `componentName` 为组件名，`filename` 为完整文件名，例如 `button-1748876097257.js`。
 
-成功返回 HTTP 200 和文件原始内容，不使用 JSON 信封。读取目录为 `src/data/components/<componentName>/<filename>`，不查询数据库。
+成功从数据库返回 HTTP 200 和 JS 文件原始内容，不使用 JSON 信封。只查询改造后上传并保存于 `component_files` 表中的文件；现有本地文件不会自动迁移。
 
 - 文件不存在：HTTP 404，`{"status":"error","message":"文件不存在"}`。
 - 处理异常：HTTP 500，`{"status":"error","message":"具体错误信息"}`。
 
 ```powershell
-curl.exe "http://localhost:3000/micro/components/file/button/button-1748876097257.js"
+curl.exe "http://localhost:1001/micro/components/file/button/button-1748876097257.js"
 ```
 
 ### 6.2 上传组件文件
@@ -285,10 +285,10 @@ curl.exe "http://localhost:3000/micro/components/file/button/button-174887609725
 
 表单字段：
 
-- `componentName`：必需的组件名字符串。必须在 `file` 字段之前发送，存储回调需要读取该字段。
+- `componentName`：必需的组件名字符串。
 - `file`：必需，单个文件，字段名固定为 `file`。
 - `version`：可选字符串，默认 `unknown`。同名组件版本重复时会触发数据库唯一约束。
-- `timestamp`：可选的毫秒时间戳字符串。建议显式传入，并在文件字段前发送；文件名、数据库 `time` 和 `publishTime` 使用此值。不传时存储与控制器分别调用 `Date.now()`，可能略有差异。
+- `timestamp`：可选的毫秒时间戳字符串；文件名、数据库 `time` 和 `publishTime` 使用同一个值。不传时生成一次当前时间戳。
 - `publisher`：可选字符串，默认 `system`。
 - `description`：可选字符串，默认 `Version <version>`。
 - `buildInfo`：可选字符串，默认空字符串，写入 `publishInfo.buildInfo`。
@@ -312,10 +312,10 @@ curl.exe "http://localhost:3000/micro/components/file/button/button-174887609725
 
 处理器将 `name`、`dependencies`、`peerDependencies`、`author`、`license`、`repository` 写入组件 `metadata`，将 `metadata.buildDetails` 单独写入 `buildDetails`；其他 metadata 字段不会原样保留。`buildTime` 从 `buildDetails.buildTime` 转为日期。
 
-PowerShell 调用示例（需先准备本地 `button.js`；会写入文件和数据库）：
+PowerShell 调用示例（需先准备本地 `button.js`；服务端只写入数据库）：
 
 ```powershell
-curl.exe -X POST "http://localhost:3000/micro/components/file/upload" `
+curl.exe -X POST "http://localhost:1001/micro/components/file/upload" `
   -F "componentName=button" `
   -F "version=1.0.0" `
   -F "timestamp=1748876097257" `
@@ -337,13 +337,11 @@ curl.exe -X POST "http://localhost:3000/micro/components/file/upload" `
 }
 ```
 
-上传会创建 `status=published` 的记录，生成 `publishInfo`，并重建所有活跃配置，无需再调用发布接口。
+上传会在同一数据库事务中保存 `status=published` 的版本记录、JS 文件内容及活跃配置，无需再调用发布接口。失败时事务回滚。
 
 - 未提供文件：HTTP 400，`{"status":"error","message":"未上传文件"}`。
 - metadata JSON 无效、数据库写入或活跃配置更新失败：HTTP 500，`{"status":"error","message":"具体错误信息"}`。
-- Multer 中间件转交的错误使用全局错误响应；缺少组件名也可能在存储阶段失败。
-
-当前文件实际保存到项目根目录的 `components/<componentName>/`，与下载目录不一致，因此成功响应中的 `path` 不能保证可以下载。数据库操作失败时，已上传文件没有自动清理；活跃配置更新失败时也可能已经创建组件记录。
+- Multer 中间件转交的错误使用全局错误响应；缺少组件名会导致数据库校验失败。
 
 ## 7. 配置与迁移
 

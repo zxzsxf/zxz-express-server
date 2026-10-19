@@ -65,15 +65,15 @@ async function startServer() {
     console.log('');
     console.log('如果暂时不想使用数据库，可以修改 src/config/index.js 中的配置');
     
-    // 即使数据库连接失败，也启动服务器（使用文件系统存储）
-    console.log('正在使用文件系统存储模式启动服务器...');
+    // 即使数据库连接失败，也启动非数据库接口
+    console.log('数据库不可用，组件接口将无法使用...');
     
     app.listen(port, () => {
-      console.log(`${config.APP_NAME} 服务器运行在 http://localhost:${port} (文件系统模式)`);
+      console.log(`${config.APP_NAME} 服务器运行在 http://localhost:${port} (数据库不可用)`);
       console.log(`环境: ${process.env.NODE_ENV || 'dev'}`);
-      console.log('注意: 数据库功能不可用，仅支持文件系统存储');
+      console.log('注意: 组件上传、下载和查询需要数据库连接');
     });
   }
 }
 
-startServer(); 
+startServer();

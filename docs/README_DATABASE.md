@@ -47,7 +47,7 @@ SHOW TABLES;
 - `DB_NAME`：默认 `goview`。
 - `DB_USER`：默认 `root`。
 - `DB_PWD`：默认 `your_new_password`，需要改为实际密码。
-- `PORT`：HTTP 服务端口，默认 `3000`。
+- `PORT`：HTTP 服务端口，默认 `1001`。
 
 在启动服务的同一个 PowerShell 窗口中设置：
 
@@ -57,7 +57,7 @@ $env:DB_PORT = "3306"
 $env:DB_NAME = "goview"
 $env:DB_USER = "root"
 $env:DB_PWD = "你的MySQL密码"
-$env:PORT = "3000"
+$env:PORT = "1001"
 pnpm run dev
 ```
 
@@ -87,7 +87,7 @@ pnpm run dev
 - `componentName`：`VARCHAR(100)`，非空，组件名称。
 - `version`：`VARCHAR(50)`，非空，版本字符串。
 - `filePath`：`VARCHAR(500)`，非空，组件访问路径，例如 `/micro/components/file/button/button-1748876097257.js`，不保存文件内容。
-- `fileSize`：`BIGINT`，可空，文件大小；当前上传和迁移逻辑未主动赋值。
+- `fileSize`：`BIGINT`，可空，文件大小；新上传会赋值，历史迁移可能为空。
 - `buildTime`：`DATETIME`，可空，构建时间。
 - `publishTime`：`DATETIME`，可空，发布时间。
 - `publisher`：`VARCHAR(100)`，可空，发布者。
@@ -108,7 +108,11 @@ pnpm run dev
 
 `time` 没有唯一约束，代码也不校验版本是否符合语义化版本规范。默认排序规则不区分大小写，组件名和版本的唯一性按数据库排序规则判断。
 
-### 3.2 active_components：活跃组件配置
+### 3.2 component_files：组件 JS 文件
+
+每行保存一个已上传组件版本的 JS 文件。`componentId` 唯一并关联 `components.id`；`filePath` 唯一，供下载接口查询。`fileSize` 为字节数，`content` 为 `LONGBLOB` 原始内容。删除组件版本时，外键级联删除关联文件。现有本地文件不自动导入此表。
+
+### 3.3 active_components：活跃组件配置
 
 每个组件名最多一行，保存当前选中的版本引用及其元数据快照。
 
@@ -130,7 +134,7 @@ pnpm run dev
 
 Sequelize 关联别名分别是 `Component.hasMany(..., as: 'activeVersions')` 和 `ActiveComponent.belongsTo(..., as: 'component')`。业务通过 `componentName` 唯一约束进一步限制每个组件只选中一个版本。外键只验证 ID 引用，不校验两表的名称、版本和快照内容是否一致。
 
-### 3.3 SQL 与模型同步的差异
+### 3.4 SQL 与模型同步的差异
 
 模型使用 Sequelize `timestamps` 管理 `created_at` 和 `updated_at`，而初始化 SQL 使用数据库 `TIMESTAMP` 默认值及自动更新规则；模型没有显式声明这些列的 SQL 默认值。
 
@@ -142,9 +146,9 @@ Sequelize 关联别名分别是 `Component.hasMany(..., as: 'activeVersions')` �
 
 - 组件查询、版本管理、发布和配置查询接口读取数据库。
 - `src/data/components/components-info.json` 和 `active-components.json` 是历史文件数据，供迁移读取；当前数据库写入流程不会自动同步更新这两个文件。
-- 文件下载从 `src/data/components/<componentName>/<filename>` 读取。
-- 当前上传路由却将文件保存到项目根目录的 `components/<componentName>`，与下载目录不一致。因此上传入库成功后仍可能下载 404，部署时需核对文件实际位置。
-- 删除数据库版本不会删除磁盘上的 JavaScript 文件；迁移也不会复制文件或验证文件存在。
+- 新上传的 JS 文件内容写入 `component_files`；下载只从该表读取，不读写本地 JS 文件。
+- 上传的版本信息、文件内容和活跃配置更新处于同一事务，失败时一起回滚。
+- 历史本地 JS 文件不自动导入；即使版本信息已经入库，缺少文件记录的旧 URL 也返回 404。历史 JSON 迁移仍只导入版本信息和活跃配置。
 
 ### 4.2 活跃版本选择
 
@@ -173,7 +177,7 @@ Sequelize 关联别名分别是 `Component.hasMany(..., as: 'activeVersions')` �
 服务启动后，在 PowerShell 中执行：
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:3000/micro/migrate"
+Invoke-RestMethod -Method Post -Uri "http://localhost:1001/micro/migrate"
 ```
 
 主要映射规则：
@@ -213,15 +217,15 @@ LEFT JOIN components AS c ON c.id = a.componentId;
 再查询数据库业务接口，除 HTTP 状态外也检查响应体的 `code` 和 `msg`：
 
 ```powershell
-Invoke-RestMethod -Uri "http://localhost:3000/micro/components"
-Invoke-RestMethod -Uri "http://localhost:3000/micro/components/version/list/button"
-Invoke-RestMethod -Uri "http://localhost:3000/micro/config/active-components"
+Invoke-RestMethod -Uri "http://localhost:1001/micro/components"
+Invoke-RestMethod -Uri "http://localhost:1001/micro/components/version/list/button"
+Invoke-RestMethod -Uri "http://localhost:1001/micro/config/active-components"
 ```
 
 如需按当前发布记录重建活跃配置，可执行下列写操作；它会清空并重建活跃表，执行前应确认第 4.2 节的选择规则符合预期：
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:3000/micro/config/active-components/update"
+Invoke-RestMethod -Method Post -Uri "http://localhost:1001/micro/config/active-components/update"
 ```
 
 ## 7. 排查与备份

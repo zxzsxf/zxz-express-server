@@ -267,16 +267,17 @@ const updateActiveComponentsConfig = async (req, res) => {
 const getComponentFile = async (req, res) => {
   try {
     const { componentName, filename } = req.params
-    const filePath = path.join(componentsDir, componentName, filename)
-    
-    if (!fs.existsSync(filePath)) {
+    const filePath = `/micro/components/file/${componentName}/${filename}`
+    const file = await componentService.getComponentFile(filePath)
+
+    if (!file) {
       return res.status(404).json({
         status: 'error',
         message: '文件不存在'
       })
     }
-    
-    res.sendFile(filePath)
+
+    res.type('application/javascript').send(file.content)
   } catch (error) {
     res.status(500).json({
       status: 'error',
@@ -297,7 +298,8 @@ const uploadComponentFile = async (req, res) => {
 
     const componentName = req.body.componentName
     const version = req.body.version || 'unknown'
-    const timestamp = req.body.timestamp || Date.now()
+    const timestamp = String(req.body.timestamp || Date.now())
+    const filename = `${componentName}-${timestamp}.js`
     const buildInfo = req.body.buildInfo || ''
     const metadata = req.body.metadata ? JSON.parse(req.body.metadata) : {}
     
@@ -305,8 +307,9 @@ const uploadComponentFile = async (req, res) => {
     const componentData = {
       componentName,
       version,
-      filePath: `/micro/components/file/${componentName}/${req.file.filename}`,
-      time: timestamp.toString(),
+      filePath: `/micro/components/file/${componentName}/${filename}`,
+      fileSize: req.file.size,
+      time: timestamp,
       publisher: req.body.publisher || 'system',
       description: req.body.description || `Version ${version}`,
       status: 'published',
@@ -321,7 +324,7 @@ const uploadComponentFile = async (req, res) => {
       buildDetails: metadata.buildDetails || {},
       publishInfo: {
         publisher: req.body.publisher || 'system',
-        publishTime: timestamp.toString(),
+        publishTime: timestamp,
         description: req.body.description || `Version ${version}`,
         buildInfo: buildInfo,
         status: 'published'
@@ -330,16 +333,12 @@ const uploadComponentFile = async (req, res) => {
       publishTime: new Date(parseInt(timestamp))
     }
 
-    // 添加组件到数据库
-    const component = await componentService.addComponent(componentData)
-    
-    // 更新活跃组件配置
-    await componentService.updateActiveComponents()
+    const component = await componentService.addComponentFile(componentData, req.file.buffer)
     
     res.json({
       status: 'success',
       data: {
-        filename: req.file.filename,
+        filename,
         path: component.filePath,
         info: component
       },
