@@ -31,13 +31,30 @@ const schemaComponents = (node, depth = 0, found = new Set()) => {
 }
 const validateSchema = (schema, locks = {}) => {
   if (schema?.type !== 'object' || !schema.properties || !noScript(schema)) fail(400, 'Invalid schema')
+  if (!locks || typeof locks !== 'object' || Array.isArray(locks)) fail(400, 'Invalid component locks')
   const used = schemaComponents(schema)
   for (const name of used) if (!locks[name]?.version || !locks[name]?.remoteName) fail(400, `Missing component lock: ${name}`)
-  for (const name of Object.keys(locks)) if (!used.has(name)) fail(400, `Unused component lock: ${name}`)
+  for (const name of Object.keys(locks)) if (!used.has(name) && !locks[name]?.configSchema) fail(400, `Unused component lock: ${name}`)
+}
+const validateBundle = async (locks, requireActive = false) => {
+  if (!locks || typeof locks !== 'object' || Array.isArray(locks) || !noScript(locks)) fail(400, 'Invalid component definitions')
+  for (const [name, lock] of Object.entries(locks)) {
+    if (!lock || typeof lock !== 'object' || typeof lock.remoteName !== 'string' || typeof lock.version !== 'string') fail(400, 'Invalid component definition')
+    if (!lock.configSchema) continue
+    validateConfig(lock.configSchema, lock.configBindings, `${lock.remoteName}:${lock.version}`)
+    if (!lock.defaultFieldSchema || lock.defaultFieldSchema['x-component'] !== name) fail(400, 'Invalid component schema')
+    schemaComponents(lock.defaultFieldSchema)
+    const component = await Component.findOne({ where: { componentName: lock.remoteName, version: lock.version, status: 'published' } })
+    if (!component || component.metadata?.lowcode?.schemaComponent !== name) fail(400, `Unavailable component: ${name}`)
+    if (requireActive) {
+      const active = await models.ActiveComponent.findOne({ where: { componentName: lock.remoteName, version: lock.version } })
+      if (!active) fail(400, `Component is no longer active: ${name}`)
+    }
+  }
 }
 const publicDoc = row => {
   const value = row.toJSON()
-  return { id: value.id, kind: value.kind, title: value.title, schema: value.schema, componentLocks: value.componentLocks || {}, bindings: value.bindings || {}, revision: value.revision, publishedVersion: value.publishedVersion, sourceTemplateId: value.sourceTemplateId, sourceTemplateVersion: value.sourceTemplateVersion, updatedAt: value.updated_at }
+  return { id: value.id, kind: value.kind, title: value.title, schema: value.schema, componentLocks: value.componentLocks || {}, bindings: value.bindings || {}, revision: value.revision, publishedVersion: value.publishedVersion, sourceTemplateId: value.sourceTemplateId, sourceTemplateVersion: value.sourceTemplateVersion, createdAt: value.created_at, updatedAt: value.updated_at }
 }
 const docId = (kind, id) => `${kind}:${id}`
 const getDoc = async (kind, id, options = {}) => {
@@ -80,6 +97,10 @@ const verifyLocks = async locks => {
   for (const [name, lock] of Object.entries(locks)) {
     const component = await Component.findOne({ where: { componentName: lock.remoteName, version: lock.version, status: 'published' } })
     if (!component || component.metadata?.lowcode?.schemaComponent !== name) fail(400, `Unavailable component: ${name}`)
+    if (lock.configSchema) {
+      validateConfig(lock.configSchema, lock.configBindings, `${lock.remoteName}:${lock.version}`)
+      continue
+    }
     const config = await getDoc('config', `${lock.remoteName}:${lock.version}`)
     if (!lock.configVersion || !config.publishedVersion || lock.configVersion > config.publishedVersion) fail(400, `Unavailable configuration: ${name}`)
     await getVersion(config.id, lock.configVersion)
@@ -141,6 +162,7 @@ const createDoc = kind => wrap(async (req, res) => {
   }
   if (kind === 'config') validateConfig(initialSchema, bindings, id)
   else validateSchema(initialSchema, initialLocks)
+  await validateBundle(initialLocks, kind === 'template')
   const row = await Document.create({ id: docId(kind, id), kind, title: title.trim(), schema: initialSchema, componentLocks: initialLocks, bindings, sourceTemplateId: templateId || null, sourceTemplateVersion })
   send(res, publicDoc(row))
 })
@@ -149,6 +171,12 @@ const updateDoc = kind => wrap(async (req, res) => {
   if (!Number.isInteger(revision) || typeof title !== 'string' || !title.trim()) fail(400, 'Invalid update')
   if (kind === 'config') validateConfig(schema, bindings, req.params.id)
   else validateSchema(schema, componentLocks)
+  await validateBundle(componentLocks)
+  if (kind === 'template') {
+    const previous = await getDoc(kind, req.params.id)
+    const additions = Object.fromEntries(Object.entries(componentLocks).filter(([name, lock]) => !previous.componentLocks?.[name] || previous.componentLocks[name].version !== lock.version || previous.componentLocks[name].remoteName !== lock.remoteName))
+    await validateBundle(additions, true)
+  }
   const data = await sequelize.transaction(async transaction => {
     const row = await getDoc(kind, req.params.id, { transaction, lock: transaction.LOCK.UPDATE })
     if (row.revision !== revision) fail(409, 'Document changed; reload before saving')

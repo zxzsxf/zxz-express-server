@@ -31,3 +31,17 @@
 ## 验证
 
 `node --test test/component-publish.test.js test/lowcode.test.js test/forms.test.js` 验证接口与发布链路。`node scripts/smoke-lowcode-schema.js` 在本机 MySQL 中创建临时数据库，执行 M→B→C API 场景，并在结束时删除临时数据库。浏览器中的真实手机视口和远程 JS 上传仍需按上述操作顺序手工验收。
+
+### 三步模板配置（2026-10-20）
+
+管理入口统一为 `/manage/templates`。新建模板信息与组件配置保留为浏览器草稿，完成第三步时才 POST `/api/lowcode/templates`；编辑时 PUT `/api/lowcode/templates/:id`，携带当前 `revision`。发布仍使用 POST `/templates/:id/publish`。
+
+模板保存结构沿用 `schema` 和 JSON 列 `componentLocks`，无需数据库迁移。`schema` 为模板画布，`componentLocks` 的每个键为 schema 组件名，值除 `remoteName`、`version` 外，增加：
+
+- `displayName`：显示名称。
+- `defaultFieldSchema`：所选组件的初始 schema。
+- `configSchema`：组件属性配置表单 schema。
+- `configBindings`：配置字段到组件属性的映射。
+- `configVersion: 0`：使用模板内置配置；旧记录继续使用独立配置表单的已发布版本。
+
+允许保留已选择但未加入画布的内置组件。新选组件必须来自 active-components 且对应已发布版本；既有模板的锁定版本不随活跃版本切换。配置字段当前支持 Input、Switch，属性映射沿用现有各组件白名单。模板及其发布快照保存完整组件定义，B 端从模板创建表单时继承定义和配置面板，修改其他模板不会改变已发布版本。读取草稿接口同时返回服务端 `createdAt`。

@@ -23,6 +23,8 @@ test('M publishes config and template, B publishes a form, C submits values', as
   replace(models.LowCodeVersion, 'findOne', async ({ where }) => versions.get(`${where.documentId}:${where.version}`) || null)
   replace(models.LowCodeSubmission, 'create', async data => row({ id: 'submission-1', ...data }))
   replace(models.Component, 'findOne', async ({ where }) => where.componentName === 'Input' && where.version === '1.0.0' ? row({ componentName: 'Input', version: '1.0.0', status: 'published', metadata: { lowcode: { schemaComponent: 'Input' } } }) : null)
+  let activeVersion = '1.0.0'
+  replace(models.ActiveComponent, 'findOne', async ({ where }) => where.componentName === 'Input' && where.version === activeVersion ? row(where) : null)
   replace(sequelize, 'transaction', async callback => callback({ LOCK: { UPDATE: 'UPDATE' } }))
   const app = express()
   app.use(express.json())
@@ -78,6 +80,29 @@ test('M publishes config and template, B publishes a form, C submits values', as
     assert.equal(status, 400)
     const [conflict] = await request('/forms/form1', 'PUT', { revision: 0, title: '旧标题', schema: { type: 'object', properties: { name: field } }, componentLocks: locks })
     assert.equal(conflict, 409)
+    // Bundled templates persist unused selected components and private config schemas.
+    const configSchema = { type: 'object', properties: { hint: { type: 'string', title: '提示', 'x-component': 'Input' } } }
+    const bundle = { Input: { remoteName: 'Input', version: '1.0.0', configVersion: 0, defaultFieldSchema: field, configSchema, configBindings: { hint: 'x-component-props.placeholder' } } }
+    const [bundleStatus, bundleResult] = await request('/templates', 'POST', { id: 'bundled', title: '组合模板', schema: { type: 'object', properties: {} }, componentLocks: bundle })
+    assert.equal(bundleStatus, 200)
+    assert.deepEqual(bundleResult.data.componentLocks, bundle)
+    activeVersion = '2.0.0'
+    assert.equal((await request('/templates', 'POST', { id: 'inactiveBundle', title: '已失活组件', componentLocks: bundle }))[0], 400)
+    assert.equal(docs.has('template:inactiveBundle'), false)
+    activeVersion = '1.0.0'
+    assert.equal((await request('/templates/bundled/publish', 'POST', { revision: 1 }))[0], 200)
+    const [derivedStatus, derived] = await request('/forms', 'POST', { id: 'derived', title: '模板业务表单', templateId: 'bundled' })
+    assert.equal(derivedStatus, 200)
+    assert.deepEqual(derived.data.componentLocks, bundle)
+    assert.equal((await request('/forms/derived/publish', 'POST', { revision: 1 }))[0], 200)
+    const invalid = { Input: { ...bundle.Input, configBindings: { hint: 'x-component-props.script' } } }
+    assert.equal((await request('/templates', 'POST', { id: 'invalidBundle', title: '非法绑定', componentLocks: invalid }))[0], 400)
+    // Editing another template does not mutate an already published snapshot.
+    const changedBundle = { Input: { ...bundle.Input, configSchema: { type: 'object', properties: {} }, configBindings: {} } }
+    assert.equal((await request('/templates/bundled', 'PUT', { revision: 1, title: '修改配置', schema: { type: 'object', properties: {} }, componentLocks: changedBundle }))[0], 200)
+    const [, frozen] = await request('/templates/bundled/versions/1')
+    assert.deepEqual(frozen.data.componentLocks, bundle)
+    assert.equal((await request('/templates/bundled', 'PUT', { revision: 1, title: '过期', schema: { type: 'object', properties: {} }, componentLocks: bundle }))[0], 409)
     const cLogin = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'respondent', password: 'test-password-123' }) })
     const cBody = await cLogin.json()
     const cCookie = cLogin.headers.get('set-cookie').split(';')[0]
