@@ -86,6 +86,17 @@ test('M publishes config and template, B publishes a form, C submits values', as
     const [bundleStatus, bundleResult] = await request('/templates', 'POST', { id: 'bundled', title: '组合模板', schema: { type: 'object', properties: {} }, componentLocks: bundle })
     assert.equal(bundleStatus, 200)
     assert.deepEqual(bundleResult.data.componentLocks, bundle)
+    const bundledSchema = {
+      type: 'object',
+      properties: {},
+      'x-component-configs': {
+        Input: { schema: configSchema, bindings: bundle.Input.configBindings }
+      }
+    }
+    assert.deepEqual(bundleResult.data.schema, bundledSchema)
+    assert.deepEqual(docs.get('template:bundled').schema, bundledSchema)
+    const [, reloadedBundle] = await request('/templates/bundled')
+    assert.deepEqual(reloadedBundle.data.schema, bundledSchema)
     activeVersion = '2.0.0'
     assert.equal((await request('/templates', 'POST', { id: 'inactiveBundle', title: '已失活组件', componentLocks: bundle }))[0], 400)
     assert.equal(docs.has('template:inactiveBundle'), false)
@@ -94,14 +105,102 @@ test('M publishes config and template, B publishes a form, C submits values', as
     const [derivedStatus, derived] = await request('/forms', 'POST', { id: 'derived', title: '模板业务表单', templateId: 'bundled' })
     assert.equal(derivedStatus, 200)
     assert.deepEqual(derived.data.componentLocks, bundle)
+    assert.deepEqual(derived.data.schema, bundledSchema)
     assert.equal((await request('/forms/derived/publish', 'POST', { revision: 1 }))[0], 200)
     const invalid = { Input: { ...bundle.Input, configBindings: { hint: 'x-component-props.script' } } }
     assert.equal((await request('/templates', 'POST', { id: 'invalidBundle', title: '非法绑定', componentLocks: invalid }))[0], 400)
     // Editing another template does not mutate an already published snapshot.
     const changedBundle = { Input: { ...bundle.Input, configSchema: { type: 'object', properties: {} }, configBindings: {} } }
-    assert.equal((await request('/templates/bundled', 'PUT', { revision: 1, title: '修改配置', schema: { type: 'object', properties: {} }, componentLocks: changedBundle }))[0], 200)
+    const [updateStatus, updateResult] = await request('/templates/bundled', 'PUT', { revision: 1, title: '修改配置', schema: bundledSchema, componentLocks: changedBundle })
+    assert.equal(updateStatus, 200)
+    assert.deepEqual(updateResult.data.schema['x-component-configs'], {
+      Input: { schema: { type: 'object', properties: {} }, bindings: {} }
+    })
     const [, frozen] = await request('/templates/bundled/versions/1')
     assert.deepEqual(frozen.data.componentLocks, bundle)
+    assert.deepEqual(frozen.data.schema, bundledSchema)
+    // Private template configuration forms do not require property bindings.
+    const unboundBundle = { Input: { ...bundle.Input, configBindings: {} } }
+    const [unboundStatus, unboundResult] = await request('/templates', 'POST', {
+      id: 'unboundBundle', title: '独立配置表单', componentLocks: unboundBundle
+    })
+    assert.equal(unboundStatus, 200)
+    assert.deepEqual(unboundResult.data.schema['x-component-configs'].Input, {
+      schema: configSchema, bindings: {}
+    })
+    // Designer-generated empty validators and reactions are safe to persist and publish.
+    const emptyRules = [[], {}, null, '']
+    for (const [index, empty] of emptyRules.entries()) {
+      const ruleSchema = {
+        type: 'object',
+        properties: {
+          hint: {
+            type: 'string',
+            'x-component': 'Input',
+            'x-validator': empty,
+            'x-reactions': empty
+          }
+        }
+      }
+      const ruleBundle = {
+        Input: { ...unboundBundle.Input, configSchema: ruleSchema }
+      }
+      const id = `emptyRules${index}`
+      const [ruleStatus, ruleResult] = await request('/templates', 'POST', {
+        id, title: '空校验与联动', componentLocks: ruleBundle
+      })
+      assert.equal(ruleStatus, 200)
+      assert.deepEqual(ruleResult.data.componentLocks, ruleBundle)
+      assert.equal((await request(`/templates/${id}/publish`, 'POST', { revision: 1 }))[0], 200)
+    }
+    const blockedRules = [
+      ['x-validator', ['required']],
+      ['x-validator', { required: true }],
+      ['x-validator', 'required'],
+      ['x-reactions', [{ fulfill: { state: { visible: true } } }]],
+      ['x-reactions', { fulfill: {} }],
+      ['x-reactions', '{{run()}}'],
+      ['x-validator', false],
+      ['x-reactions', 0],
+      ['x-data', {}],
+      ['onClick', ''],
+      ['onChange', null],
+      ['script', []]
+    ]
+    for (const [index, [key, value]] of blockedRules.entries()) {
+      const blockedBundle = {
+        Input: {
+          ...unboundBundle.Input,
+          configSchema: {
+            type: 'object',
+            properties: {
+              hint: { type: 'string', 'x-component': 'Input', [key]: value }
+            }
+          }
+        }
+      }
+      const [blockedStatus, blockedResult] = await request('/templates', 'POST', {
+        id: `blockedRules${index}`, title: '禁止的规则', componentLocks: blockedBundle
+      })
+      assert.equal(blockedStatus, 400)
+      assert.equal(blockedResult.msg, 'Invalid component definitions')
+      assert.equal(docs.has(`template:blockedRules${index}`), false)
+    }
+    // The standalone configuration endpoint still requires bindings.
+    assert.equal((await request('/component-configs', 'POST', {
+      id: 'Input:unbound', title: '缺少绑定', schema: configSchema, bindings: {}
+    }))[0], 400)
+    const invalidSchemaBundle = {
+      Input: { ...unboundBundle.Input, configSchema: { type: 'object', properties: { bad: { type: 'string', 'x-component': 'Unknown' } } } }
+    }
+    assert.equal((await request('/templates', 'POST', {
+      id: 'invalidConfigSchema', title: '非法配置表单', componentLocks: invalidSchemaBundle
+    }))[0], 400)
+    const [removeStatus, removed] = await request('/templates/bundled', 'PUT', {
+      revision: 2, title: '移除已选组件', schema: bundledSchema, componentLocks: {}
+    })
+    assert.equal(removeStatus, 200)
+    assert.equal(removed.data.schema['x-component-configs'], undefined)
     assert.equal((await request('/templates/bundled', 'PUT', { revision: 1, title: '过期', schema: { type: 'object', properties: {} }, componentLocks: bundle }))[0], 409)
     const cLogin = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'respondent', password: 'test-password-123' }) })
     const cBody = await cLogin.json()

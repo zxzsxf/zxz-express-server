@@ -19,9 +19,25 @@ const fail = (status, message) => {
   throw error
 }
 
-const noScript = value => value !== undefined &&
-  JSON.stringify(value).length <= 256 * 1024 &&
-  !/"(?:x-reactions|x-validator|x-data|onClick|onChange|script)"\s*:/.test(JSON.stringify(value))
+const noScript = value => {
+  if (value === undefined) return false
+  const serialized = JSON.stringify(value)
+  if (serialized.length > 256 * 1024) return false
+
+  let safe = true
+  JSON.parse(serialized, (key, entry) => {
+    if (['x-data', 'onClick', 'onChange', 'script'].includes(key)) {
+      safe = false
+    }
+    if (['x-validator', 'x-reactions'].includes(key)) {
+      const empty = entry === null || entry === '' ||
+        (typeof entry === 'object' && Object.keys(entry).length === 0)
+      if (!empty) safe = false
+    }
+    return entry
+  })
+  return safe
+}
 
 const schemaComponents = (node, depth = 0, found = new Set()) => {
   if (!node || typeof node !== 'object' || Array.isArray(node) || depth > 12) fail(400, 'Invalid schema')
@@ -62,7 +78,7 @@ const validateBundle = async (locks, requireActive = false) => {
   for (const [name, lock] of Object.entries(locks)) {
     if (!lock || typeof lock !== 'object' || typeof lock.remoteName !== 'string' || typeof lock.version !== 'string') fail(400, 'Invalid component definition')
     if (!lock.configSchema) continue
-    validateConfig(lock.configSchema, lock.configBindings, `${lock.remoteName}:${lock.version}`)
+    validateConfig(lock.configSchema, lock.configBindings || {}, `${lock.remoteName}:${lock.version}`, false)
     if (!lock.defaultFieldSchema || lock.defaultFieldSchema['x-component'] !== name) fail(400, 'Invalid component schema')
     schemaComponents(lock.defaultFieldSchema)
     const component = await Component.findOne({
@@ -76,6 +92,22 @@ const validateBundle = async (locks, requireActive = false) => {
       if (!active) fail(400, `Component is no longer active: ${name}`)
     }
   }
+}
+
+// 以组件锁中的配置为准，确保 Schema 与配置表单同步，包含尚未放入画布的已选组件。
+const withComponentConfigs = (schema, locks) => {
+  const configs = Object.fromEntries(
+    Object.entries(locks)
+      .filter(([, lock]) => Boolean(lock.configSchema))
+      .map(([name, lock]) => [name, {
+        schema: lock.configSchema,
+        bindings: lock.configBindings || {}
+      }])
+  )
+  const next = { ...schema }
+  delete next['x-component-configs']
+  if (Object.keys(configs).length) next['x-component-configs'] = configs
+  return next
 }
 
 const publicDoc = row => {
@@ -123,11 +155,11 @@ const validateBindings = bindings => {
   if (Object.values(bindings).some(path => !allowed.includes(path))) fail(400, 'Unsupported binding')
 }
 
-const validateConfig = (schema, bindings, id) => {
+const validateConfig = (schema, bindings, id, requireBindings = true) => {
   if (schema?.type !== 'object' || !schema.properties || !noScript(schema)) fail(400, 'Invalid configuration schema')
   validateBindings(bindings)
   const fields = Object.entries(schema.properties)
-  if (fields.some(([key, field]) => !bindings[key] || !['Input', 'Switch'].includes(field?.['x-component']))) fail(400, 'Configuration fields need supported controls and bindings')
+  if (fields.some(([key, field]) => (requireBindings && !bindings[key]) || !['Input', 'Switch'].includes(field?.['x-component']))) fail(400, 'Configuration fields need supported controls and bindings')
   if (Object.keys(bindings).some(key => !schema.properties[key])) fail(400, 'Unknown configuration binding')
   const componentName = id.split(':')[0]
   const allowed = {
@@ -153,7 +185,7 @@ const verifyLocks = async locks => {
     })
     if (!component || component.metadata?.lowcode?.schemaComponent !== name) fail(400, `Unavailable component: ${name}`)
     if (lock.configSchema) {
-      validateConfig(lock.configSchema, lock.configBindings, `${lock.remoteName}:${lock.version}`)
+      validateConfig(lock.configSchema, lock.configBindings || {}, `${lock.remoteName}:${lock.version}`, false)
       continue
     }
     const config = await getDoc('config', `${lock.remoteName}:${lock.version}`)
@@ -225,6 +257,10 @@ const createDoc = async (kind, body) => {
   if (kind === 'config') validateConfig(initialSchema, bindings, id)
   else validateSchema(initialSchema, initialLocks)
   await validateBundle(initialLocks, kind === 'template')
+  if (kind !== 'config') {
+    initialSchema = withComponentConfigs(initialSchema, initialLocks)
+    validateSchema(initialSchema, initialLocks)
+  }
   const row = await Document.create({
     id: docId(kind, id),
     kind,
@@ -253,10 +289,12 @@ const updateDoc = async (kind, id, body) => {
     ))
     await validateBundle(additions, true)
   }
+  const savedSchema = kind === 'config' ? schema : withComponentConfigs(schema, componentLocks)
+  if (kind !== 'config') validateSchema(savedSchema, componentLocks)
   return sequelize.transaction(async transaction => {
     const row = await getDoc(kind, id, { transaction, lock: transaction.LOCK.UPDATE })
     if (row.revision !== revision) fail(409, 'Document changed; reload before saving')
-    await row.update({ title: title.trim(), schema, componentLocks, bindings, revision: revision + 1 }, { transaction })
+    await row.update({ title: title.trim(), schema: savedSchema, componentLocks, bindings, revision: revision + 1 }, { transaction })
     return publicDoc(row)
   })
 }
