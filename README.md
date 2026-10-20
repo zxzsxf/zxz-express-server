@@ -38,7 +38,7 @@ zxz-express-server/
 │  │  └─ componentService.js      # 组件元数据和发布业务逻辑
 │  ├─ utils/db_utils/             # Sequelize/Knex 数据库工具
 │  └─ server.js                   # Express 初始化和服务启动入口
-├─ env.example                    # 占位文件（当前不会被程序自动加载）
+├─ env.example                    # 环境变量示例，复制为 .env 后加载
 ├─ nodemon.json                  # 本地开发热重载配置
 ├─ pm2.json                      # PM2 生产进程配置
 └─ package.json                  # 依赖和 npm/pnpm scripts
@@ -114,7 +114,7 @@ export DB_PWD='你的MySQL密码'
 export PORT=1001
 ```
 
-注意：仓库中的 `env.example` 只是占位内容；项目没有引入 dotenv，也没有加载 `.env` 文件的代码。请通过系统环境变量配置，或直接调整 `src/config/index.js`。
+也可以将 `env.example` 复制为项目根目录的 `.env` 并填写配置。服务及低代码 CLI 脚本会自动加载它，已有进程环境变量优先。低代码认证还需设置至少 32 个字符的随机 `LOWCODE_SESSION_SECRET`；修改后重启服务。`.env` 已被 Git 忽略，不要提交真实密钥。
 
 ### 4. 启动开发服务
 

@@ -9,7 +9,8 @@ const app = express();
 const port = config.APP_PORT;
 
 // 中间件
-app.use(cors());
+const allowedOrigins = (process.env.LOWCODE_ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000').split(',').map(value => value.trim());
+app.use(cors({ origin: (origin, callback) => callback(null, !origin || allowedOrigins.includes(origin)), credentials: true }));
 app.use(bodyParser.json({ limit: '5mb' }));
 app.use(bodyParser.urlencoded({ extended: true }));
 

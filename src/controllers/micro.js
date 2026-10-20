@@ -312,14 +312,15 @@ const uploadComponentFile = async (req, res) => {
       time: timestamp,
       publisher: req.body.publisher || 'system',
       description: req.body.description || `Version ${version}`,
-      status: 'published',
+      status: 'draft',
       metadata: {
         name: metadata.name,
         dependencies: metadata.dependencies || {},
         peerDependencies: metadata.peerDependencies || {},
         author: metadata.author,
         license: metadata.license,
-        repository: metadata.repository || {}
+        repository: metadata.repository || {},
+        lowcode: metadata.lowcode || null
       },
       buildDetails: metadata.buildDetails || {},
       publishInfo: {
@@ -327,10 +328,10 @@ const uploadComponentFile = async (req, res) => {
         publishTime: timestamp,
         description: req.body.description || `Version ${version}`,
         buildInfo: buildInfo,
-        status: 'published'
+        status: 'draft'
       },
       buildTime: metadata.buildDetails?.buildTime ? new Date(metadata.buildDetails.buildTime) : null,
-      publishTime: new Date(parseInt(timestamp))
+      publishTime: null
     }
 
     const component = await componentService.addComponentFile(componentData, req.file.buffer)

@@ -1,6 +1,9 @@
 'use strict';
 
 const path = require('path');
+// Resolve from the project directory so server and CLI scripts share configuration.
+// Existing process environment variables take precedence over the local file.
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 const _package = require('../../package.json');
 
 const APP_ROOT = process.cwd();

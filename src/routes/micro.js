@@ -4,6 +4,12 @@ const microController = require('../controllers/micro');
 const multer = require('multer');
 
 const upload = multer({ storage: multer.memoryStorage() });
+const requirePublisher = (req, res, next) => {
+  const expected = process.env.LOWCODE_COMPONENT_PUBLISH_TOKEN;
+  if (!expected || expected.length < 32) return res.status(503).json({ code: 503, msg: 'Component publisher token is not configured' });
+  if (req.get('x-component-publish-token') !== expected) return res.status(403).json({ code: 403, msg: 'Publisher authorization required' });
+  next();
+};
 
 // 组件相关接口
 // 获取组件列表
@@ -13,20 +19,17 @@ router.get('/components', async (req, res) => {
 });
 
 // 查找组件
-router.post('/components/find', async (req, res) => {
-  const result = await microController.findComponent(req, res);
-  res.json(result);
-});
+router.post('/components/find', microController.findComponent);
 
 // 发布组件
-router.post('/components/publish', async (req, res) => {
+router.post('/components/publish', requirePublisher, async (req, res) => {
   const result = await microController.publishComponent(req, res);
-  res.json(result);
+  res.status(result.code === 200 ? 200 : result.code === 400 ? 400 : 500).json(result);
 });
 
 // 组件版本管理相关接口
 // 新增组件版本信息
-router.post('/components/version', async (req, res) => {
+router.post('/components/version', requirePublisher, async (req, res) => {
   const result = await microController.addComponentInfo(req, res);
   res.json(result);
 });
@@ -38,13 +41,13 @@ router.get('/components/version/list/:componentName', async (req, res) => {
 });
 
 // 更新组件版本信息
-router.put('/components/version/:componentName/:timestamp', async (req, res) => {
+router.put('/components/version/:componentName/:timestamp', requirePublisher, async (req, res) => {
   const result = await microController.updateComponentInfo(req, res);
   res.json(result);
 });
 
 // 删除组件版本信息
-router.delete('/components/version/:componentName/:timestamp', async (req, res) => {
+router.delete('/components/version/:componentName/:timestamp', requirePublisher, async (req, res) => {
   const result = await microController.deleteComponentInfo(req, res);
   res.json(result);
 });
@@ -54,7 +57,7 @@ router.delete('/components/version/:componentName/:timestamp', async (req, res) 
 router.get('/components/file/:componentName/:filename', microController.getComponentFile);
 
 // 上传组件文件
-router.post('/components/file/upload', upload.single('file'), microController.uploadComponentFile);
+router.post('/components/file/upload', requirePublisher, upload.single('file'), microController.uploadComponentFile);
 
 // 配置相关接口
 // 获取组件信息配置
@@ -70,13 +73,13 @@ router.get('/config/active-components', async (req, res) => {
 });
 
 // 更新活跃组件配置
-router.post('/config/active-components/update', async (req, res) => {
+router.post('/config/active-components/update', requirePublisher, async (req, res) => {
   const result = await microController.updateActiveComponentsConfig(req, res);
   res.json(result);
 });
 
 // 数据迁移接口
-router.post('/migrate', async (req, res) => {
+router.post('/migrate', requirePublisher, async (req, res) => {
   const result = await microController.migrateData(req, res);
   res.json(result);
 });

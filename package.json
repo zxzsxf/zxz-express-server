@@ -4,6 +4,8 @@
   "description": "ZXZ Server API",
   "main": "./src/server.js",
   "scripts": {
+    "lowcode:migrate": "node scripts/migrate-lowcode.js",
+    "lowcode:user": "node scripts/create-lowcode-user.js",
     "dev": "cross-env NODE_ENV=dev nodemon ./src/server.js",
     "start": "node ./src/server.js",
     "prod": "cross-env NODE_ENV=prod node ./src/server.js",
@@ -18,6 +20,7 @@
     "body-parser": "^1.20.1",
     "cors": "^2.8.5",
     "dayjs": "^1.11.7",
+    "dotenv": "16.6.1",
     "express": "^4.18.2",
     "express-list-endpoints": "^6.0.0",
     "jsonwebtoken": "^9.0.0",

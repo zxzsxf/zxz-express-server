@@ -47,7 +47,7 @@ Object.keys(models).forEach(modelName => {
 // 同步数据库表结构
 const syncDatabase = async () => {
   try {
-    await sequelize.sync({ alter: true })
+    if (process.env.NODE_ENV !== 'production') await sequelize.sync({ alter: true })
     console.log('数据库表结构同步成功')
   } catch (error) {
     console.error('数据库表结构同步失败:', error)
@@ -58,4 +58,4 @@ module.exports = {
   sequelize,
   models,
   syncDatabase
-} 
+}

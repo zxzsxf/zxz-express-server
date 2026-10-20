@@ -3,6 +3,7 @@ const router = express.Router();
 const microRouter = require('./micro');
 const goviewRouter = require('./goview');
 const formRouter = require('./forms');
+const lowcodeRouter = require('./lowcode');
 
 // 测试路由
 router.get('/test', (req, res) => {
@@ -17,5 +18,6 @@ router.get('/test', (req, res) => {
 router.use('/micro', microRouter);
 router.use('/goview', goviewRouter);
 router.use('/api/forms', formRouter);
+router.use('/api/lowcode', lowcodeRouter);
 
 module.exports = router;

@@ -45,7 +45,7 @@ class ComponentService {
   async findComponent(componentName, version) {
     try {
       const component = await Component.findOne({
-        where: { componentName, version }
+        where: { componentName, version, status: 'published' }
       })
       return component ? component.toJSON() : null
     } catch (error) {
@@ -195,24 +195,22 @@ class ComponentService {
   // 发布组件
   async publishComponent(componentName, version) {
     try {
-      const component = await Component.findOne({
-        where: { componentName, version }
+      return await sequelize.transaction(async transaction => {
+        const component = await Component.findOne({
+          where: { componentName, version }, transaction, lock: transaction.LOCK.UPDATE
+        })
+        if (!component) throw new Error('组件不存在')
+        if (component.status !== 'draft') throw new Error('只能发布草稿组件')
+
+        const publishTime = new Date()
+        await component.update({
+          status: 'published',
+          publishTime,
+          publishInfo: { ...(component.publishInfo || {}), status: 'published', publishTime: publishTime.toISOString() }
+        }, { transaction })
+        await this.updateActiveComponents(transaction)
+        return component.toJSON()
       })
-      
-      if (!component) {
-        throw new Error('组件不存在')
-      }
-      
-      // 更新组件状态为已发布
-      await component.update({
-        status: 'published',
-        publishTime: new Date()
-      })
-      
-      // 更新活跃组件配置
-      await this.updateActiveComponents()
-      
-      return component.toJSON()
     } catch (error) {
       throw new Error(`发布组件失败: ${error.message}`)
     }
