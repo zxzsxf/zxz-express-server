@@ -249,6 +249,7 @@ const createDoc = async (kind, body) => {
   let sourceTemplateVersion = null
   if (kind === 'form' && templateId) {
     const template = await getDoc('template', templateId)
+    if (!template.publishedVersion) fail(404, 'Not published')
     sourceTemplateVersion = templateVersion || template.publishedVersion
     const source = await getVersion(template.id, sourceTemplateVersion)
     initialSchema = source.schema
@@ -310,10 +311,18 @@ const publishDoc = async (kind, id, body, userId) => sequelize.transaction(async
     validateSchema(row.schema, row.componentLocks)
     await verifyLocks(row.componentLocks)
   }
-  const version = (row.publishedVersion || 0) + 1
+  const latestVersion = await Version.max('version', { where: { documentId: row.id }, transaction })
+  const version = (latestVersion || 0) + 1
   await Version.create({ documentId: row.id, version, title: row.title, schema: row.schema, componentLocks: row.componentLocks, bindings: row.bindings, publishedBy: userId }, { transaction })
   await row.update({ publishedVersion: version }, { transaction })
   return { version }
+})
+
+const unpublishTemplate = async (id, body) => sequelize.transaction(async transaction => {
+  const row = await getDoc('template', id, { transaction, lock: transaction.LOCK.UPDATE })
+  if (row.revision !== body?.revision) fail(409, 'Document changed; reload before unpublishing')
+  await row.update({ publishedVersion: null }, { transaction })
+  return publicDoc(row)
 })
 
 const publishedDoc = async (kind, id, version) => {
@@ -363,6 +372,7 @@ module.exports = {
   createDoc,
   updateDoc,
   publishDoc,
+  unpublishTemplate,
   publishedDoc,
   listPublishedForms,
   createSubmission

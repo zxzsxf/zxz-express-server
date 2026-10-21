@@ -76,6 +76,10 @@ const publishedDoc = kind => wrap(async (req, res) => {
   send(res, await lowcodeService.publishedDoc(kind, req.params.id, req.params.version))
 })
 
+const unpublishTemplate = wrap(async (req, res) => {
+  send(res, await lowcodeService.unpublishTemplate(req.params.id, req.body))
+})
+
 const listPublishedForms = wrap(async (_req, res) => {
   send(res, await lowcodeService.listPublishedForms())
 })
@@ -103,6 +107,7 @@ module.exports = {
   createDoc,
   updateDoc,
   publishDoc,
+  unpublishTemplate,
   publishedDoc,
   listPublishedForms,
   createSubmission,

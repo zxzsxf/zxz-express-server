@@ -15,6 +15,7 @@ const {
   createDoc,
   updateDoc,
   publishDoc,
+  unpublishTemplate,
   publishedDoc,
   listPublishedForms,
   createSubmission,
@@ -34,6 +35,7 @@ router.post('/templates', role('M'), createDoc('template'))
 router.get('/templates/:id', role('M'), readDoc('template'))
 router.put('/templates/:id', role('M'), updateDoc('template'))
 router.post('/templates/:id/publish', role('M'), publishDoc('template'))
+router.post('/templates/:id/unpublish', role('M'), unpublishTemplate)
 router.get('/templates/:id/published', role('M', 'B'), publishedDoc('template'))
 router.get('/templates/:id/versions/:version', role('M', 'B'), publishedDoc('template'))
 

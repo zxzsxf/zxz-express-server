@@ -21,6 +21,10 @@ test('M publishes config and template, B publishes a form, C submits values', as
   replace(models.LowCodeDocument, 'findAll', async ({ where }) => [...docs.values()].filter(item => item.kind === where.kind))
   replace(models.LowCodeVersion, 'create', async data => { const saved = row(data); versions.set(`${data.documentId}:${data.version}`, saved); return saved })
   replace(models.LowCodeVersion, 'findOne', async ({ where }) => versions.get(`${where.documentId}:${where.version}`) || null)
+  replace(models.LowCodeVersion, 'max', async (_field, { where }) => {
+    const matching = [...versions.values()].filter(item => item.documentId === where.documentId)
+    return matching.length ? Math.max(...matching.map(item => item.version)) : null
+  })
   replace(models.LowCodeSubmission, 'create', async data => row({ id: 'submission-1', ...data }))
   replace(models.Component, 'findOne', async ({ where }) => where.componentName === 'Input' && where.version === '1.0.0' ? row({ componentName: 'Input', version: '1.0.0', status: 'published', metadata: { lowcode: { schemaComponent: 'Input' } } }) : null)
   let activeVersion = '1.0.0'
@@ -202,12 +206,31 @@ test('M publishes config and template, B publishes a form, C submits values', as
     assert.equal(removeStatus, 200)
     assert.equal(removed.data.schema['x-component-configs'], undefined)
     assert.equal((await request('/templates/bundled', 'PUT', { revision: 1, title: '过期', schema: { type: 'object', properties: {} }, componentLocks: bundle }))[0], 409)
+    // Unpublishing preserves snapshots and existing forms; republishing advances the version.
+    assert.equal((await request('/templates/customer/unpublish', 'POST', { revision: 0 }))[0], 409)
+    assert.equal((await request('/templates/missing/unpublish', 'POST', { revision: 1 }))[0], 404)
+    const [unpublishStatus, unpublished] = await request('/templates/customer/unpublish', 'POST', { revision: 1 })
+    assert.equal(unpublishStatus, 200)
+    assert.equal(unpublished.data.publishedVersion, null)
+    const [, templateList] = await request('/templates')
+    assert.equal(templateList.data.find(item => item.id === 'template:customer').publishedVersion, null)
+    assert.equal((await request('/templates/customer/published'))[0], 404)
+    assert.equal((await request('/forms', 'POST', { id: 'blockedTemplate', title: '已取消发布', templateId: 'customer', templateVersion: 1 }))[0], 404)
+    assert.equal((await request('/forms/form1/published'))[0], 200)
+    assert.ok(versions.has('template:customer:1'))
+    assert.equal((await request('/templates/customer/unpublish', 'POST', { revision: 1 }))[0], 200)
+    const [republishStatus, republished] = await request('/templates/customer/publish', 'POST', { revision: 1 })
+    assert.equal(republishStatus, 200)
+    assert.equal(republished.data.version, 2)
+    assert.equal((await request('/templates/customer/versions/1'))[0], 200)
     const cLogin = await fetch(`${base}/auth/login`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'respondent', password: 'test-password-123' }) })
     const cBody = await cLogin.json()
     const cCookie = cLogin.headers.get('set-cookie').split(';')[0]
     const cRequest = (path, method = 'GET', data, csrf = cBody.data.csrf) => fetch(`${base}${path}`, { method, headers: { cookie: cCookie, 'content-type': 'application/json', ...(csrf ? { 'x-lowcode-csrf': csrf } : {}) }, body: data === undefined ? undefined : JSON.stringify(data) })
     assert.equal((await cRequest('/forms/published')).status, 200)
     assert.equal((await cRequest('/templates', 'POST', { id: 'blocked', title: 'No' })).status, 403)
+    assert.equal((await cRequest('/templates/customer/unpublish', 'POST', { revision: 1 })).status, 403)
+    assert.equal((await cRequest('/templates/customer/unpublish', 'POST', { revision: 1 }, '')).status, 403)
     assert.equal((await cRequest('/forms/form1/submissions', 'POST', { publishVersion: 1, values: { name: '李四' } }, '')).status, 403)
     assert.equal((await cRequest('/forms/form1/submissions', 'POST', { publishVersion: 1, values: { name: '李四' } })).status, 200)
   } finally {
